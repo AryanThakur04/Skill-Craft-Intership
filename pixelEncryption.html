@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Encryption Tool</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better visual experience */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            color: #c9d1d9;
+        }
+        .card {
+            background-color: #161b22;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+            border: 1px solid #30363d;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 ease-in-out;
+        }
+        .btn-secondary {
+            @apply bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 ease-in-out;
+        }
+        canvas {
+            border: 1px solid #30363d;
+            border-radius: 0.5rem;
+            max-width: 100%;
+            height: auto;
+        }
+        .spinner {
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 min-h-screen">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-white mb-2">Simple Pixel Encryption</h1>
+            <p class="text-gray-400">Encrypt or decrypt images using basic XOR or R/B pixel swapping.</p>
+        </header>
+
+        <div class="card p-6 rounded-xl space-y-6">
+            
+            <!-- File Input & Key -->
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label for="imageUpload" class="block text-sm font-medium text-gray-300 mb-2">1. Select Image (.png, .jpg, .gif)</label>
+                    <input type="file" id="imageUpload" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 cursor-pointer rounded-lg p-2 bg-gray-700">
+                </div>
+                <div>
+                    <label for="xorKey" class="block text-sm font-medium text-gray-300 mb-2">2. Enter XOR Key (0-255)</label>
+                    <input type="number" id="xorKey" value="153" min="0" max="255" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white placeholder-gray-400">
+                </div>
+            </div>
+
+            <!-- Operations -->
+            <div class="pt-4 border-t border-gray-700">
+                <label class="block text-lg font-medium text-gray-300 mb-3">3. Choose Operation</label>
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <button id="xorEncryptBtn" class="btn-primary" disabled>XOR Encrypt/Decrypt</button>
+                    <button id="swapEncryptBtn" class="btn-primary" disabled>R/B Swap Encrypt/Decrypt</button>
+                    <button id="resetBtn" class="btn-secondary">Reset Image</button>
+                    <button id="downloadBtn" class="btn-secondary" disabled>Download Processed Image</button>
+                </div>
+            </div>
+
+            <!-- Loading Indicator & Status -->
+            <div id="statusMessage" class="text-center text-sm font-medium py-2 rounded-lg" style="display: none;"></div>
+
+            <!-- Canvas Area -->
+            <div class="pt-6">
+                <h2 class="text-xl font-semibold mb-3">Processed Image (Canvas)</h2>
+                <div id="canvasContainer" class="w-full aspect-video flex justify-center items-center bg-gray-800 rounded-lg">
+                    <canvas id="imageCanvas"></canvas>
+                    <p id="placeholderText" class="text-gray-500">Upload an image to start processing.</p>
+                    <div id="loadingIndicator" class="spinner w-8 h-8 border-4 border-gray-500 border-solid rounded-full" style="display: none;"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Global variables for the canvas context, original image, and key
+        let canvas, ctx;
+        let originalImage = null;
+        let currentImage = null;
+
+        // DOM Elements
+        const imageUpload = document.getElementById('imageUpload');
+        const xorKeyInput = document.getElementById('xorKey');
+        const xorEncryptBtn = document.getElementById('xorEncryptBtn');
+        const swapEncryptBtn = document.getElementById('swapEncryptBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const placeholderText = document.getElementById('placeholderText');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const statusMessage = document.getElementById('statusMessage');
+
+        // Utility to display status messages
+        function showStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.style.display = 'block';
+            statusMessage.className = `text-center text-sm font-medium py-2 rounded-lg mt-4 ${
+                type === 'error' ? 'bg-red-900 text-red-300' : 
+                type === 'success' ? 'bg-green-900 text-green-300' : 
+                'bg-blue-900 text-blue-300'
+            }`;
+        }
+
+        function toggleControls(enabled) {
+            xorEncryptBtn.disabled = !enabled;
+            swapEncryptBtn.disabled = !enabled;
+            downloadBtn.disabled = !enabled;
+            resetBtn.disabled = !enabled;
+            xorKeyInput.disabled = !enabled;
+        }
+
+        function drawImageToCanvas(img) {
+            // Set canvas size based on the image size
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Draw the image onto the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // Hide placeholder and show canvas
+            placeholderText.style.display = 'none';
+            canvas.style.display = 'block';
+            loadingIndicator.style.display = 'none';
+
+            toggleControls(true);
+        }
+
+        // --- Core Pixel Processing Logic ---
+
+        function processPixels(imageData, operation, key = 0) {
+            const data = imageData.data; // Uint8ClampedArray: R, G, B, A, R, G, B, A, ...
+
+            for (let i = 0; i < data.length; i += 4) {
+                const rIndex = i;
+                const gIndex = i + 1;
+                const bIndex = i + 2;
+                // i + 3 is the alpha channel, which we leave untouched
+
+                if (operation === 'xor') {
+                    // Apply XOR to R, G, and B channels
+                    data[rIndex] = data[rIndex] ^ key;
+                    data[gIndex] = data[gIndex] ^ key;
+                    data[bIndex] = data[bIndex] ^ key;
+                } else if (operation === 'swap') {
+                    // Simple R <-> B swap: (R, G, B) -> (B, G, R)
+                    const originalR = data[rIndex];
+                    const originalB = data[bIndex];
+                    data[rIndex] = originalB; // R becomes B
+                    data[bIndex] = originalR; // B becomes R
+                }
+            }
+            // Put the modified data back onto the canvas
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function encryptImage(operation) {
+            if (!originalImage) {
+                showStatus("Please upload an image first.", 'error');
+                return;
+            }
+
+            // Show loading indicator
+            loadingIndicator.style.display = 'block';
+            canvas.style.display = 'none';
+            toggleControls(false);
+            statusMessage.style.display = 'none';
+
+            setTimeout(() => {
+                try {
+                    // 1. Get the current image data from the canvas
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    let key = 0;
+                    if (operation === 'xor') {
+                        key = parseInt(xorKeyInput.value, 10);
+                        if (isNaN(key) || key < 0 || key > 255) {
+                            showStatus("Invalid XOR key. Please use an integer between 0 and 255.", 'error');
+                            return;
+                        }
+                    }
+
+                    // 2. Process the pixels
+                    processPixels(imageData, operation, key);
+
+                    // 3. Update status
+                    const action = operation === 'xor' ? 'XOR processed' : 'R/B Swap processed';
+                    showStatus(`Image successfully ${action}. Click again to reverse the process!`, 'success');
+
+                } catch (e) {
+                    console.error(e);
+                    showStatus(`Error during image processing: ${e.message}`, 'error');
+                } finally {
+                    // Restore control visibility
+                    loadingIndicator.style.display = 'none';
+                    canvas.style.display = 'block';
+                    toggleControls(true);
+                }
+            }, 10); // Use a small delay to allow the loading indicator to show
+        }
+
+        // --- Event Handlers ---
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Show loading
+            placeholderText.style.display = 'none';
+            loadingIndicator.style.display = 'block';
+            statusMessage.style.display = 'none';
+            toggleControls(false);
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    originalImage = img;
+                    currentImage = img;
+                    drawImageToCanvas(originalImage);
+                    showStatus("Image loaded successfully. Ready to encrypt.", 'info');
+                };
+                img.onerror = function() {
+                    showStatus("Could not load image file.", 'error');
+                    // Reset inputs on failure
+                    imageUpload.value = '';
+                    placeholderText.style.display = 'block';
+                    loadingIndicator.style.display = 'none';
+                }
+                img.src = e.target.result;
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        function resetImage() {
+            if (originalImage) {
+                drawImageToCanvas(originalImage);
+                showStatus("Image reset to its original state.", 'info');
+            } else {
+                showStatus("No original image loaded to reset.", 'error');
+            }
+        }
+
+        function downloadImage() {
+            if (!originalImage) {
+                showStatus("Please load an image before attempting to download.", 'error');
+                return;
+            }
+
+            const dataURL = canvas.toDataURL('image/png'); // Get image data as PNG
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'encrypted_image.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showStatus("Encrypted image downloaded successfully as encrypted_image.png.", 'success');
+        }
+
+        // --- Initialization ---
+
+        window.onload = function() {
+            canvas = document.getElementById('imageCanvas');
+            ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+            // Initially hide the canvas and disable controls
+            canvas.style.display = 'none';
+            toggleControls(false);
+            
+            // Setup Event Listeners
+            imageUpload.addEventListener('change', handleImageUpload);
+            xorEncryptBtn.addEventListener('click', () => encryptImage('xor'));
+            swapEncryptBtn.addEventListener('click', () => encryptImage('swap'));
+            resetBtn.addEventListener('click', resetImage);
+            downloadBtn.addEventListener('click', downloadImage);
+        }
+    </script>
+
+</body>
+</html>

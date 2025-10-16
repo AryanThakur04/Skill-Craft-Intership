@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Keystroke Recorder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+        }
+        #logArea {
+            min-height: 200px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #inputField {
+            font-size: 1.25rem;
+            padding: 1rem;
+            border: 2px solid #2e8b57;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-4xl bg-gray-800 shadow-2xl rounded-xl p-6 md:p-10 border border-gray-700">
+        
+        <h1 class="text-3xl md:text-4xl font-extrabold text-white mb-2 text-center">
+            <span class="text-green-400">Web</span> Keystroke Recorder
+        </h1>
+        <p class="text-sm text-yellow-300 mb-6 text-center">
+            ⚠️ **IMPORTANT:** This tool *only* records keystrokes typed into the input box below. It cannot monitor other applications or websites due to browser security restrictions.
+        </p>
+
+        <div class="mb-6">
+            <label for="inputField" class="block text-lg font-medium text-gray-300 mb-2">Start Typing Here:</label>
+            <input 
+                type="text" 
+                id="inputField" 
+                placeholder="Click here and start typing to record keys..."
+                class="w-full rounded-lg bg-gray-900 text-white focus:ring-green-500 focus:border-green-500 transition duration-150"
+                autofocus
+            />
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-lg font-medium text-gray-300 mb-2">Logged Keystrokes:</label>
+            <textarea 
+                id="logArea" 
+                readonly
+                class="w-full rounded-lg bg-gray-900 p-4 text-green-300 border border-gray-700 text-sm font-mono overflow-auto resize-none"
+                placeholder="Key presses will appear here in real-time..."
+            ></textarea>
+        </div>
+
+        <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+            <button 
+                id="clearLogButton" 
+                class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition duration-150 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50"
+            >
+                Clear Log
+            </button>
+            <button 
+                id="copyLogButton" 
+                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-150 shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
+            >
+                Copy Log to Clipboard
+            </button>
+        </div>
+
+        <div id="messageBox" class="mt-6 p-4 text-center rounded-lg text-sm transition-opacity duration-300 opacity-0" role="alert">
+        </div>
+    </div>
+
+    <script>
+        const inputField = document.getElementById('inputField');
+        const logArea = document.getElementById('logArea');
+        const clearLogButton = document.getElementById('clearLogButton');
+        const copyLogButton = document.getElementById('copyLogButton');
+        const messageBox = document.getElementById('messageBox');
+
+        function showMessage(text, isError = false) {
+            messageBox.textContent = text;
+            messageBox.classList.remove('opacity-0', 'bg-red-500', 'bg-green-500');
+            messageBox.classList.add(isError ? 'bg-red-500' : 'bg-green-500', 'opacity-100');
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100');
+                messageBox.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        function formatKey(key) {
+            if (key.length === 1 && key.match(/[a-zA-Z0-9]/)) {
+                return key;
+            }
+            
+            switch (key) {
+                case ' ': return '[SPACE]';
+                case 'Enter': return '\n[ENTER]\n';
+                case 'Tab': return '[TAB]';
+                case 'Shift': 
+                case 'Control':
+                case 'Alt': return `[${key.toUpperCase()}]`;
+                default:
+                    return `[${key.charAt(0).toUpperCase() + key.slice(1)}]`;
+            }
+        }
+
+        inputField.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault();
+            }
+
+            const formattedKey = formatKey(event.key);
+            
+            logArea.value += formattedKey;
+            
+            logArea.scrollTop = logArea.scrollHeight;
+        });
+
+        clearLogButton.addEventListener('click', () => {
+            logArea.value = '';
+            showMessage("Log cleared successfully.");
+        });
+
+        copyLogButton.addEventListener('click', () => {
+            const textToCopy = logArea.value;
+            
+            if (textToCopy) {
+                try {
+                    inputField.select();
+                    logArea.select();
+                    document.execCommand('copy');
+                    showMessage("Log content copied to clipboard!");
+                } catch (err) {
+                    showMessage("Failed to copy log.", true);
+                    console.error('Copy failed:', err);
+                }
+            } else {
+                showMessage("Log is empty. Nothing to copy.", false);
+            }
+        });
+    </script>
+</body>
+</html>
